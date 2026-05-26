@@ -10,6 +10,7 @@ LOG_DIR = "logs"
 STATE_FILE = os.path.join(DATA_DIR, "state_yf.json")      # 使用独立的状态文件
 HISTORY_FILE = os.path.join(DATA_DIR, "nasdaq_history_yf.csv") # 使用独立的历史文件
 TICKER_SYMBOL = "^NDX"                                    # 纳斯达克100指数代码
+TICKER_SYMBOL_QQQ = "QQQ"                                # 纳斯达克100ETF代码
 
 def ensure_dirs():
     """确保必要的本地目录已创建。"""
@@ -55,7 +56,8 @@ def fetch_data():
         latest = hist_1y.iloc[-1]
         
         # 2. 获取 PE (yfinance 指数 PE 通常不直接提供，这里使用 2026-05-24 已知值作为 fallback)
-        current_pe = 35.04 
+        qqq = yf.Ticker(TICKER_SYMBOL_QQQ)
+        current_pe = qqq.info.get("trailingPE")
         
         return {
             "name": "Nasdaq 100 (^NDX)",
@@ -175,7 +177,7 @@ def main():
         
         print(f"当前指数: {data['name']}")
         print(f"数据日期: {date}")
-        print(f"当前 PE:  {pe:.2f} (基于已知估值)")
+        print(f"QQQ ETF当前 PE:  {pe:.2f} (基于已知估值)")
         print(f"当前点位: {val:.2f}")
         print(f"一年高点: {high_1y:.2f}")
         print(f"当前回撤: {dd_pct:.2f}%")
