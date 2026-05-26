@@ -40,45 +40,44 @@ def save_state(state):
 
 def fetch_data():
     """
-    使用 yfinance 获取纳指100数据。
+    使用 yfinance 获取纳指100数据，包含当前点位和近一年最高点。
     """
     try:
         ticker = yf.Ticker(TICKER_SYMBOL)
-        # 获取最近一天的历史数据
-        hist = ticker.history(period="1d")
         
-        if hist.empty:
-            # 如果 1d 没数据（可能是非交易日），尝试 5d 取最后一条
-            hist = ticker.history(period="5d")
+        # 1. 获取近一年的历史数据用于计算最高点
+        hist_1y = ticker.history(period="1y")
+        if hist_1y.empty:
+            print("Warning: 1y history is empty.")
+            return None
             
-        if not hist.empty:
-            latest = hist.iloc[-1]
-            # yfinance 不直接提供实时的 PE 指数，这里使用 fallback PE
-            # 因为 yfinance 的 info 在某些环境下（如 windows sandbox）可能因为 sqlite 缓存报错
-            # 我们优先保证点位的准确性，PE 采用固定值或从历史中推断（如果可能）
-            
-            # 尝试获取 PE (yfinance 指数 PE 通常不直接提供，这里使用 2026-05-24 已知值)
-            current_pe = 35.04 
-            
-            return {
-                "name": "Nasdaq 100 (^NDX)",
-                "pe": current_pe,
-                "value": float(latest['Close']),
-                "date": hist.index[-1].strftime("%Y-%m-%d")
-            }
+        high_1y = float(hist_1y['High'].max())
+        latest = hist_1y.iloc[-1]
+        
+        # 2. 获取 PE (yfinance 指数 PE 通常不直接提供，这里使用 2026-05-24 已知值作为 fallback)
+        current_pe = 35.04 
+        
+        return {
+            "name": "Nasdaq 100 (^NDX)",
+            "pe": current_pe,
+            "value": float(latest['Close']),
+            "high_1y": high_1y,
+            "date": hist_1y.index[-1].strftime("%Y-%m-%d")
+        }
     except Exception as e:
         print(f"Error fetching data via yfinance: {e}")
     return None
 
-def calculate_strategy(current_pe, current_value, state):
+def calculate_strategy(current_pe, current_value, high_value, state):
     """
-    策略逻辑与 nasdaq_strategy.py 保持完全一致。
+    策略逻辑。
+    high_value: 传入的近一年最高点。
     """
-    if current_value > state["max_value"]:
-        state["max_value"] = current_value
+    # 同步状态中的最高点（虽然计算主要以传入的 high_value 为准）
+    if high_value > state["max_value"]:
+        state["max_value"] = high_value
     
-    max_val = state["max_value"]
-    drawdown = (max_val - current_value) / max_val if max_val > 0 else 0
+    drawdown = (high_value - current_value) / high_value if high_value > 0 else 0
     drawdown_pct = drawdown * 100
 
     recommendation = ""
@@ -169,15 +168,16 @@ def main():
     if data:
         pe = data['pe']
         val = data['value']
+        high_1y = data['high_1y']
         date = data['date']
 
-        rec, reason, dd_pct = calculate_strategy(pe, val, state)
+        rec, reason, dd_pct = calculate_strategy(pe, val, high_1y, state)
         
         print(f"当前指数: {data['name']}")
         print(f"数据日期: {date}")
         print(f"当前 PE:  {pe:.2f} (基于已知估值)")
         print(f"当前点位: {val:.2f}")
-        print(f"历史高点: {state['max_value']:.2f}")
+        print(f"一年高点: {high_1y:.2f}")
         print(f"当前回撤: {dd_pct:.2f}%")
         print("-" * 40)
         print(f"【投资建议】: {rec}")
