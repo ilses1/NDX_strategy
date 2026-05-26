@@ -3,6 +3,10 @@ import json
 import yfinance as yf
 import pandas as pd
 from datetime import datetime
+# 新增发邮件依赖
+import smtplib
+from email.mime.text import MIMEText
+from email.header import Header
 
 # --- 配置参数 ---
 DATA_DIR = "data"                                      
@@ -11,6 +15,12 @@ STATE_FILE = os.path.join(DATA_DIR, "state_yf.json")      # 使用独立的状�
 HISTORY_FILE = os.path.join(DATA_DIR, "nasdaq_history_yf.csv") # 使用独立的历史文件
 TICKER_SYMBOL = "^NDX"                                    # 纳斯达克100指数代码
 TICKER_SYMBOL_QQQ = "QQQ"                                # 纳斯达克100ETF代码
+
+# 邮箱环境变量（不硬编码，从GitHub Secrets读取）
+MAIL_HOST = os.getenv("MAIL_HOST", "smtp.qq.com")
+MAIL_USER = os.getenv("MAIL_USER")
+MAIL_PASS = os.getenv("MAIL_PASS")
+MAIL_RECEIVER = os.getenv("MAIL_RECEIVER")
 
 def ensure_dirs():
     """确保必要的本地目录已创建。"""
@@ -158,6 +168,27 @@ def update_history(date, pe, value, high, drawdown, recommendation):
     else:
         df_new.to_csv(HISTORY_FILE, index=False)
 
+# ===================== 【新增】邮件发送函数 =====================
+def send_email(subject, content):
+    if not all([MAIL_USER, MAIL_PASS, MAIL_RECEIVER]):
+        print("未配置邮箱信息，跳过邮件发送")
+        return False
+    try:
+        msg = MIMEText(content, 'plain', 'utf-8')
+        msg['From'] = Header("纳指100自动策略", 'utf-8')
+        msg['To'] = Header(MAIL_RECEIVER, 'utf-8')
+        msg['Subject'] = Header(subject, 'utf-8')
+
+        server = smtplib.SMTP_SSL(MAIL_HOST, 465)
+        server.login(MAIL_USER, MAIL_PASS)
+        server.sendmail(MAIL_USER, [MAIL_RECEIVER], msg.as_string())
+        server.quit()
+        print("邮件发送成功")
+        return True
+    except Exception as e:
+        print(f"邮件发送失败: {e}")
+        return False
+
 def main():
     ensure_dirs()
     print("="*40)
@@ -192,8 +223,27 @@ def main():
         log_msg = f"{datetime.now().isoformat()} | YF | PE: {pe:.2f} | VAL: {val:.2f} | DD: {dd_pct:.2f}% | REC: {rec}\n"
         with open(os.path.join(LOG_DIR, "strategy_yf.log"), "a", encoding="utf-8") as f:
             f.write(log_msg)
+
+        # ===================== 【新增】调用发邮件 =====================
+        email_title = f"【纳指100策略】{rec} | PE {pe:.2f}"
+        email_content = f"""纳指100 自动投资提醒
+
+数据日期：{date}
+QQQ PE：{pe:.2f}
+当前点位：{val:.2f}
+近一年高点：{high_1y:.2f}
+当前回撤：{dd_pct:.2f}%
+
+投资建议：{rec}
+触发理由：{reason}
+
+系统自动发送
+"""
+        send_email(email_title, email_content)
+        
     else:
         print("无法通过 yfinance 获取数据，请检查网络或 Ticker 代码。")
+        send_email("纳指100策略执行失败", "数据获取失败，请检查")
 
 if __name__ == "__main__":
     main()

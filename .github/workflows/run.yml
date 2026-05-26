@@ -1,0 +1,29 @@
+name: 纳指100自动策略
+
+on:
+  schedule:
+    - cron: "0 5 * * *" # 每天 北京时间 13:00 运行
+  workflow_dispatch: # 允许手动点击运行
+
+jobs:
+  run-strategy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: 安装 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: 安装依赖
+        run: |
+          python -m pip install --upgrade pip
+          pip install yfinance pandas
+
+      - name: 运行策略 + 发邮件
+        env:
+          MAIL_HOST: ${{ secrets.MAIL_HOST }}
+          MAIL_USER: ${{ secrets.MAIL_USER }}
+          MAIL_PASS: ${{ secrets.MAIL_PASS }}
+          MAIL_RECEIVER: ${{ secrets.MAIL_RECEIVER }}
+        run: python main.py
