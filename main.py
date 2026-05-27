@@ -175,18 +175,19 @@ def send_email(subject, content):
         return False
     try:
         msg = MIMEText(content, 'plain', 'utf-8')
-        msg['From'] = Header("纳指100自动策略", 'utf-8')
-        msg['To'] = Header(MAIL_RECEIVER, 'utf-8')
+        # ✅ 修复 QQ 邮箱报错：From 必须用真实邮箱地址
+        msg['From'] = f"纳指100自动策略 <{MAIL_USER}>"
+        msg['To'] = MAIL_RECEIVER
         msg['Subject'] = Header(subject, 'utf-8')
 
         server = smtplib.SMTP_SSL(MAIL_HOST, 465)
         server.login(MAIL_USER, MAIL_PASS)
         server.sendmail(MAIL_USER, [MAIL_RECEIVER], msg.as_string())
         server.quit()
-        print("邮件发送成功")
+        print("✅ 邮件发送成功")
         return True
     except Exception as e:
-        print(f"邮件发送失败: {e}")
+        print(f"❌ 邮件发送失败: {e}")
         return False
 
 def main():
