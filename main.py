@@ -175,8 +175,10 @@ def send_email(subject, content):
         return False
     try:
         msg = MIMEText(content, 'plain', 'utf-8')
-        # ✅ 修复 QQ 邮箱报错：From 必须用真实邮箱地址
-        msg['From'] = f"纳指100自动策略 <{MAIL_USER}>"
+        # ✅ 修复 QQ 邮箱报错：From 头需要正确编码
+        from_header = Header("纳指100自动策略", 'utf-8')
+        from_header.append(f"<{MAIL_USER}>", 'ascii')
+        msg['From'] = from_header
         msg['To'] = MAIL_RECEIVER
         msg['Subject'] = Header(subject, 'utf-8')
 
