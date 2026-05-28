@@ -2,7 +2,7 @@ name: 纳指100自动策略
 
 on:
   schedule:
-    - cron: "0 6 * * *" # 每天 北京时间 13:00 运行
+    - cron: "40 1 * * 1-5" # 工作日 北京时间 09:40 运行 (周一至周五)
   workflow_dispatch: # 允许手动点击运行
 
 jobs:
