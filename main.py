@@ -15,6 +15,8 @@ STATE_FILE = os.path.join(DATA_DIR, "state_yf.json")      # 使用独立的状�
 HISTORY_FILE = os.path.join(DATA_DIR, "nasdaq_history_yf.csv") # 使用独立的历史文件
 TICKER_SYMBOL = "^NDX"                                    # 纳斯达克100指数代码
 TICKER_SYMBOL_QQQ = "QQQ"                                # 纳斯达克100ETF代码
+TICKER_SYMBOL_VIX = "^VIX"                               # 恐慌指数代码
+MA6_DAYS = 126                                           # 半年线（约6个月交易日）
 
 # 邮箱环境变量（不硬编码，从GitHub Secrets读取）
 MAIL_HOST = os.getenv("MAIL_HOST", "smtp.qq.com")
@@ -69,15 +71,43 @@ def fetch_data():
         qqq = yf.Ticker(TICKER_SYMBOL_QQQ)
         current_pe = qqq.info.get("trailingPE")
         
+        ndx_close = hist_1y['Close']
+        ndx_ma6 = float(ndx_close.rolling(MA6_DAYS).mean().iloc[-1])
+        if pd.isna(ndx_ma6):
+            print("Warning: insufficient NDX history for 6-month MA.")
+            return None
+
+        vix = yf.Ticker(TICKER_SYMBOL_VIX)
+        vix_hist = vix.history(period="1y")
+        if vix_hist.empty or len(vix_hist) < MA6_DAYS:
+            print("Warning: insufficient VIX history for 6-month MA.")
+            return None
+        vix_value = float(vix_hist['Close'].iloc[-1])
+        vix_ma6 = float(vix_hist['Close'].rolling(MA6_DAYS).mean().iloc[-1])
+        if pd.isna(vix_ma6):
+            print("Warning: VIX 6-month MA is NaN.")
+            return None
+
         return {
             "name": "Nasdaq 100 (^NDX)",
             "pe": current_pe,
             "value": float(latest['Close']),
             "high_1y": high_1y,
-            "date": hist_1y.index[-1].strftime("%Y-%m-%d")
+            "date": hist_1y.index[-1].strftime("%Y-%m-%d"),
+            "ndx_ma6": ndx_ma6,
+            "ndx_below_ma6": float(latest['Close']) < ndx_ma6,
+            "vix_value": vix_value,
+            "vix_ma6": vix_ma6,
+            "vix_above_ma6": vix_value > vix_ma6,
         }
     except Exception as e:
         print(f"Error fetching data via yfinance: {e}")
+    return None
+
+def check_dca_plan_alert(data):
+    """纳指低于半年线且恐慌指数高于半年线时，提示计划全仓定投。"""
+    if data.get("ndx_below_ma6") and data.get("vix_above_ma6"):
+        return "可以开始计划30天内定投全仓买入"
     return None
 
 def calculate_strategy(current_pe, current_value, high_value, state):
@@ -208,38 +238,49 @@ def main():
         date = data['date']
 
         rec, reason, dd_pct = calculate_strategy(pe, val, high_1y, state)
+        dca_plan_alert = check_dca_plan_alert(data)
         
         print(f"当前指数: {data['name']}")
         print(f"数据日期: {date}")
         print(f"QQQ ETF当前 PE:  {pe:.2f} (基于已知估值)")
         print(f"当前点位: {val:.2f}")
+        print(f"纳指100半年线: {data['ndx_ma6']:.2f} ({'低于' if data['ndx_below_ma6'] else '高于'}半年线)")
+        print(f"恐慌指数 VIX: {data['vix_value']:.2f}")
+        print(f"VIX半年线: {data['vix_ma6']:.2f} ({'高于' if data['vix_above_ma6'] else '低于'}半年线)")
         print(f"一年高点: {high_1y:.2f}")
         print(f"当前回撤: {dd_pct:.2f}%")
         print("-" * 40)
         print(f"【投资建议】: {rec}")
         print(f"【触发理由】: {reason}")
+        if dca_plan_alert:
+            print(f"【额外提示】: {dca_plan_alert}")
         print("-" * 40)
 
         save_state(state)
         update_history(date, pe, val, state['max_value'], dd_pct, rec)
         
-        log_msg = f"{datetime.now().isoformat()} | YF | PE: {pe:.2f} | VAL: {val:.2f} | DD: {dd_pct:.2f}% | REC: {rec}\n"
+        alert_suffix = f" | ALERT: {dca_plan_alert}" if dca_plan_alert else ""
+        log_msg = f"{datetime.now().isoformat()} | YF | PE: {pe:.2f} | VAL: {val:.2f} | DD: {dd_pct:.2f}% | REC: {rec}{alert_suffix}\n"
         with open(os.path.join(LOG_DIR, "strategy_yf.log"), "a", encoding="utf-8") as f:
             f.write(log_msg)
 
         # ===================== 【新增】调用发邮件 =====================
         email_title = f"【纳指100策略】{rec} | PE {pe:.2f}"
+        extra_alert_line = f"\n额外提示：{dca_plan_alert}\n" if dca_plan_alert else ""
         email_content = f"""纳指100 自动投资提醒
 
 数据日期：{date}
 QQQ PE：{pe:.2f}
 当前点位：{val:.2f}
+纳指100半年线：{data['ndx_ma6']:.2f}
+恐慌指数 VIX：{data['vix_value']:.2f}
+VIX半年线：{data['vix_ma6']:.2f}
 近一年高点：{high_1y:.2f}
 当前回撤：{dd_pct:.2f}%
 
 投资建议：{rec}
 触发理由：{reason}
-
+{extra_alert_line}
 系统自动发送
 """
         send_email(email_title, email_content)
