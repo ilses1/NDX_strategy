@@ -15,7 +15,7 @@ STATE_FILE = os.path.join(DATA_DIR, "state_yf.json")      # 使用独立的状�
 HISTORY_FILE = os.path.join(DATA_DIR, "nasdaq_history_yf.csv") # 使用独立的历史文件
 TICKER_SYMBOL = "^NDX"                                    # 纳斯达克100指数代码
 TICKER_SYMBOL_QQQ = "QQQ"                                # 纳斯达克100ETF代码
-TICKER_SYMBOL_VIX = "^VIX"                               # 恐慌指数代码
+TICKER_SYMBOL_VIX = "VIXY"                               # 恐慌指数代码
 MA6_DAYS = 126                                           # 半年线（约6个月交易日）
 
 # 邮箱环境变量（不硬编码，从GitHub Secrets读取）
@@ -105,7 +105,7 @@ def fetch_data():
     return None
 
 def check_dca_plan_alert(data):
-    """纳指低于半年线且恐慌指数高于半年线时，提示计划全仓定投。"""
+    """纳指低于半年线且 VIXY 高于半年线时，提示计划全仓定投。"""
     if data.get("ndx_below_ma6") and data.get("vix_above_ma6"):
         return "可以开始计划30天内定投全仓买入"
     return None
@@ -245,8 +245,8 @@ def main():
         print(f"QQQ ETF当前 PE:  {pe:.2f} (基于已知估值)")
         print(f"当前点位: {val:.2f}")
         print(f"纳指100半年线: {data['ndx_ma6']:.2f} ({'低于' if data['ndx_below_ma6'] else '高于'}半年线)")
-        print(f"恐慌指数 VIX: {data['vix_value']:.2f}")
-        print(f"VIX半年线: {data['vix_ma6']:.2f} ({'高于' if data['vix_above_ma6'] else '低于'}半年线)")
+        print(f"VIXY: {data['vix_value']:.2f}")
+        print(f"VIXY半年线: {data['vix_ma6']:.2f} ({'高于' if data['vix_above_ma6'] else '低于'}半年线)")
         print(f"一年高点: {high_1y:.2f}")
         print(f"当前回撤: {dd_pct:.2f}%")
         print("-" * 40)
@@ -273,8 +273,8 @@ def main():
 QQQ PE：{pe:.2f}
 当前点位：{val:.2f}
 纳指100半年线：{data['ndx_ma6']:.2f}
-恐慌指数 VIX：{data['vix_value']:.2f}
-VIX半年线：{data['vix_ma6']:.2f}
+恐慌指数 VIXY：{data['vix_value']:.2f}
+VIXY半年线：{data['vix_ma6']:.2f}
 近一年高点：{high_1y:.2f}
 当前回撤：{dd_pct:.2f}%
 
