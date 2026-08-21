@@ -125,34 +125,43 @@ def calculate_strategy(current_pe, current_value, high_value, state):
     recommendation = ""
     reason = ""
 
-    # --- 规则二：回撤加码规则 (优先级最高) ---
+    # --- 规则一：基础定投规则（按PE） ---
+    pe_amount = 0
+    pe_reason = ""
+    if current_pe < 32:
+        pe_amount = 400
+        pe_reason = f"触发基础定投规则: PE {current_pe:.2f} < 32, 定投400元"
+    elif 32 <= current_pe < 36:
+        pe_amount = 200
+        pe_reason = f"触发基础定投规则: PE {current_pe:.2f} 在 [32, 36) 区间"
+    elif 36 <= current_pe < 38:
+        pe_amount = 100
+        pe_reason = f"触发基础定投规则: PE {current_pe:.2f} 在 [36, 38) 区间"
+    elif current_pe >= 38:
+        pe_amount = 0
+        pe_reason = f"触发基础定投规则: PE {current_pe:.2f} >= 38, 停止定投"
+
+    # --- 规则二：回撤加码规则 ---
     drawdown_rules = [
         (30, 5000), (25, 3500), (20, 2500), (18, 2000), 
         (15, 1500), (12, 1000), (10, 600), (8, 400), (6, 200)
     ]
     
-    triggered_drawdown = False
+    dd_amount = 0
+    dd_reason = ""
     for threshold, amount in drawdown_rules:
         if drawdown_pct >= threshold:
-            recommendation = f"定投 {amount} 元"
-            reason = f"触发回撤加码规则: 当前回撤 {drawdown_pct:.2f}% >= {threshold}%"
-            triggered_drawdown = True
+            dd_amount = amount
+            dd_reason = f"触发回撤加码规则: 当前回撤 {drawdown_pct:.2f}% >= {threshold}%"
             break
 
-    # --- 规则一：基础定投规则 ---
-    if not triggered_drawdown:
-        if 32 <= current_pe < 36:
-            recommendation = "定投 200 元"
-            reason = f"触发基础定投规则: PE {current_pe:.2f} 在 [32, 36) 区间"
-        elif 36 <= current_pe < 38:
-            recommendation = "定投 100 元"
-            reason = f"触发基础定投规则: PE {current_pe:.2f} 在 [36, 38) 区间"
-        elif current_pe >= 38:
-            recommendation = "停止定投"
-            reason = f"触发基础定投规则: PE {current_pe:.2f} >= 38"
-        else:
-            recommendation = "观察 (PE < 32)"
-            reason = f"当前 PE {current_pe:.2f} 低于定投起始线"
+    # --- PE和回撤结果取高 ---
+    if pe_amount >= dd_amount:
+        recommendation = f"定投 {pe_amount} 元" if pe_amount > 0 else "停止定投"
+        reason = pe_reason
+    else:
+        recommendation = f"定投 {dd_amount} 元"
+        reason = dd_reason
 
     # --- 规则三：赎回止盈规则 ---
     if current_pe >= 45:
